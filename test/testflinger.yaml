@@ -1,0 +1,58 @@
+job_queue: 202604-38596
+
+provision_data:
+  distro: desktop-26-04-uefi
+
+test_data:
+  test_cmds: |
+    set -e
+
+    mkdir -p artifacts
+
+    echo '---------- ATTACHMENTS -----------'
+    find attachments/test -print || echo "No testflinger attachments"
+
+    echo '------------ DUT INFO ------------'
+    echo "DEVICE_IP: $DEVICE_IP"
+    ssh ubuntu@$DEVICE_IP '
+      echo "HOSTNAME: $HOSTNAME"
+      echo
+      lscpu | egrep -i "architecture|model name"
+      echo
+      lspci -nnk | grep -i AMD
+      echo
+      free -h
+      echo
+      df -h --sync -T -x tmpfs
+      echo
+      grep -e VERSION /etc/os-release
+      echo
+      uname -a
+    ' | tee artifacts/sysinfo.log
+
+    echo '------------- SETUP --------------'
+    ssh ubuntu@$DEVICE_IP '
+      set -e
+      sudo apt-get update
+      sudo apt-get upgrade -y
+      sudo snap refresh
+      sudo usermod -a -G lxd $USER
+      sudo usermod -a -G render,video $USER
+    ' 2>&1 | tee artifacts/setup.log
+
+    echo '---------- INVENTORY ------------'
+    ssh ubuntu@$DEVICE_IP '
+      dpkg-query -W
+      echo
+      snap list
+    ' | tee artifacts/inventory.log
+
+    echo '------------- TESTS --------------'
+    ssh ubuntu@$DEVICE_IP '
+      set -e
+      sudo snap install --devmode llama-cpp+hip
+      llama-cpp cli --list-devices
+    ' 2>&1 | tee artifacts/test.log
+
+    echo '----------- ARTIFACTS ------------'
+    find artifacts || echo "No artifacts generated"

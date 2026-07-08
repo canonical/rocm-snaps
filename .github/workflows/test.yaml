@@ -1,0 +1,42 @@
+name: Integration tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  testflinger:
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Submit testflinger job
+        id: testflinger
+        uses: canonical/testflinger/.github/actions/submit@main
+        with:
+          job-path: test/testflinger.yaml
+          poll: true
+          client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+      - name: Download artifacts
+        run: |
+          for attempt in {1..10}; do
+            echo "Attempt $attempt: Downloading artifacts..."
+            if testflinger artifacts ${{ steps.testflinger.outputs.id }}; then
+              echo "Successfully downloaded artifacts"
+              break
+            else
+              if [ $attempt -eq 10 ]; then
+                echo "Failed to download artifacts after 10 attempts"
+                exit 1
+              fi
+              echo "Failed to download artifacts, retrying in 10 seconds..."
+              sleep 10
+            fi
+          done
+          tar -xzf artifacts.tgz
+      - name: Upload test artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts.tgz
+          if-no-files-found: error
+          name: testflinger-artifacts-${{ steps.testflinger.outputs.id }}
