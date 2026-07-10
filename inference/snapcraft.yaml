@@ -146,8 +146,8 @@ parts:
         -DTHEROCK_ENABLE_BLAS=ON \
         -DhipBLASLt_CMAKE_ARGS="-DCMAKE_CXX_FLAGS=-isystem${CRAFT_PART_BUILD}/build/core/clr/dist/include" \
         -DTHEROCK_ENABLE_ROCWMMA=ON \
-        -DTHEROCK_AMDGPU_FAMILIES='gfx90a;gfx942;gfx1030;gfx110X-all;gfx115X-all;gfx1200;gfx1201' \
-        -DTHEROCK_AMDGPU_DIST_BUNDLE_NAME='gfx90a_gfx942_gfx1030_gfx110X-all_gfx115X-all_gfx1200_gfx1201' \
+        -DTHEROCK_AMDGPU_FAMILIES='gfx90a;gfx1030;gfx110X-all;gfx115X-all;gfx1200;gfx1201' \
+        -DTHEROCK_AMDGPU_DIST_BUNDLE_NAME='gfx90a_gfx1030_gfx110X-all_gfx115X-all_gfx1200_gfx1201' \
         -DBUILD_TESTING=OFF \
         -DTHEROCK_BUILD_TESTING=OFF \
         -DTHEROCK_BUNDLE_SYSDEPS=ON
@@ -202,7 +202,7 @@ parts:
         -DGGML_NATIVE=OFF \
         -DGGML_BACKEND_DL=ON \
         -DGGML_HIP=ON \
-        -DGPU_TARGETS='gfx90a;gfx942;gfx1030;gfx1100;gfx1151;gfx11-generic;gfx1200;gfx1201' \
+        -DGPU_TARGETS='gfx90a;gfx1030;gfx1100;gfx1151;gfx11-generic;gfx1200;gfx1201' \
         -DCMAKE_BUILD_TYPE=Release \
         -DGGML_BUILD_TESTS=OFF \
         -DGGML_BUILD_EXAMPLES=OFF \
