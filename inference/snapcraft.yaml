@@ -202,7 +202,8 @@ parts:
         -DGGML_NATIVE=OFF \
         -DGGML_BACKEND_DL=ON \
         -DGGML_HIP=ON \
-        -DGPU_TARGETS='gfx90a;gfx1030;gfx1100;gfx1151;gfx11-generic;gfx1200;gfx1201' \
+        -DGPU_TARGETS='gfx90a;gfx1100;gfx1151;gfx1200;gfx1201' \
+        -DGGML_HIP_ROCWMMA_FATTN=ON \
         -DCMAKE_BUILD_TYPE=Release \
         -DGGML_BUILD_TESTS=OFF \
         -DGGML_BUILD_EXAMPLES=OFF \
