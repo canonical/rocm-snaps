@@ -9,9 +9,6 @@ test_data:
 
     mkdir -p artifacts
 
-    echo '---------- ATTACHMENTS -----------'
-    find attachments/test -print || echo "No testflinger attachments"
-
     echo '------------ DUT INFO ------------'
     echo "DEVICE_IP: $DEVICE_IP"
     ssh ubuntu@$DEVICE_IP '
@@ -50,8 +47,8 @@ test_data:
     echo '------------- TESTS --------------'
     ssh ubuntu@$DEVICE_IP '
       set -e
-      sudo snap install --devmode llama-cpp+hip
-      llama-cpp cli --list-devices
+      sudo snap install --devmode rocm-inference --channel=latest/edge
+      snap info rocm-inference
     ' 2>&1 | tee artifacts/test.log
 
     echo '----------- ARTIFACTS ------------'

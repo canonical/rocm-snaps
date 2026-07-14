@@ -1,0 +1,103 @@
+name: Full CI/CD pipeline
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/ci.yaml
+      - inference/**
+  pull_request:
+    paths:
+      - .github/workflows/ci.yaml
+      - inference/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: [self-hosted, amd64, linux, xlarge]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Snapcraft pack
+        id: snapcraft
+        uses: canonical/craft-actions/snapcraft/pack@main
+        with:
+          path: inference/
+      - name: Save CI artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          path: inference/${{ steps.snapcraft.outputs.snap }}
+          if-no-files-found: error
+          name: rocm-inference-${{ github.run_id }}
+          overwrite: true
+
+  install:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get CI artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: rocm-inference-${{ github.run_id }}
+          path: artifacts/
+      - name: Installation test
+        run: |
+          sudo snap install --dangerous --devmode artifacts/*.snap
+
+  upload:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get CI artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: rocm-inference-${{ github.run_id }}
+          path: artifacts/
+      - name: Release to snap store
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          snapcraft upload artifacts/*.snap --release latest/edge
+
+  test:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    needs: upload
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Submit TF job
+        id: testflinger
+        uses: canonical/testflinger/.github/actions/submit@main
+        with:
+          job-path: test/testflinger.yaml
+          poll: true
+          client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
+      - name: Download test artifacts
+        run: |
+          for attempt in {1..10}; do
+            echo "Attempt $attempt: Downloading artifacts..."
+            if testflinger artifacts ${{ steps.testflinger.outputs.id }}; then
+              echo "Successfully downloaded artifacts"
+              break
+            else
+              if [ $attempt -eq 10 ]; then
+                echo "Failed to download artifacts after 10 attempts"
+                exit 1
+              fi
+              echo "Failed to download artifacts, retrying in 10 seconds..."
+              sleep 10
+            fi
+          done
+      - name: Save test artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts.tgz
+          if-no-files-found: error
+          name: testflinger-artifacts-${{ steps.testflinger.outputs.id }}
