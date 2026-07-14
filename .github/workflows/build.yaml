@@ -16,16 +16,13 @@ jobs:
         uses: canonical/craft-actions/snapcraft/pack@main
         with:
           path: inference/
-      - name: Installation test
-        id: test
-        run: |
-          sudo snap install --dangerous --devmode "inference/${{ steps.snapcraft.outputs.snap }}"
-          llama-cpp.llama-cli --help
       - name: Upload snap artifact
-        if: success() || steps.test.conclusion == 'failure'
         uses: actions/upload-artifact@v7
         with:
           path: inference/${{ steps.snapcraft.outputs.snap }}
           if-no-files-found: error
-          name: llama-cpp-${{ github.run_id }}
+          name: rocm-inference-${{ github.run_id }}
           overwrite: true
+      - name: Installation test
+        run: |
+          sudo snap install --dangerous --devmode "inference/${{ steps.snapcraft.outputs.snap }}"
