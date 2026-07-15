@@ -62,7 +62,8 @@ jobs:
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
         run: |
-          snapcraft upload artifacts/*.snap --release latest/edge
+          sudo snap install snapcraft --classic
+          snapcraft upload -v artifacts/*.snap --release latest/edge
 
   test:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
