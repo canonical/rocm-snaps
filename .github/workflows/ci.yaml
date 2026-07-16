@@ -19,6 +19,7 @@ concurrency:
 jobs:
   build:
     runs-on: [self-hosted, amd64, linux, xlarge]
+    timeout-minutes: 600
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
