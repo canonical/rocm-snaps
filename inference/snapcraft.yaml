@@ -43,6 +43,7 @@ parts:
       - ninja-build
       - patchelf
       - pkg-config
+      - pkg-rocm-tools
       - python3-dev
       - python3-venv
       - texinfo
@@ -117,6 +118,14 @@ parts:
       # avoid breaking builds on newer compilers
       export CFLAGS="${CFLAGS:-} -Wno-error"
 
+      # read targets from ubuntu release (given by pkg-rocm-tools)
+      . /etc/os-release
+      GPU_TARGETS=$(
+        cat /usr/share/pkg-rocm-tools/data/build-targets/$VERSION_CODENAME \
+        | xargs printf "%s;" \
+        | awk '{ print substr( $0, 1, length($0)-1 ) }'
+      )
+
       cmake --fresh -B build -G Ninja . \
         -DTHEROCK_ENABLE_ALL=OFF \
         -DTHEROCK_ENABLE_CORE_RUNTIME=ON \
@@ -124,8 +133,8 @@ parts:
         -DTHEROCK_ENABLE_BLAS=ON \
         -DhipBLASLt_CMAKE_ARGS="-DCMAKE_CXX_FLAGS=-isystem${CRAFT_PART_BUILD}/build/core/clr/dist/include" \
         -DTHEROCK_ENABLE_ROCWMMA=ON \
-        -DTHEROCK_AMDGPU_FAMILIES='gfx90a;gfx1030;gfx110X-all;gfx115X-all;gfx1200;gfx1201' \
-        -DTHEROCK_AMDGPU_DIST_BUNDLE_NAME='gfx90a_gfx1030_gfx110X-all_gfx115X-all_gfx1200_gfx1201' \
+        -DTHEROCK_AMDGPU_FAMILIES="$GPU_TARGETS" \
+        -DTHEROCK_AMDGPU_DIST_BUNDLE_NAME="$(echo "$GPU_TARGETS" | sed 's/;/_/g')" \
         -DBUILD_TESTING=OFF \
         -DTHEROCK_BUILD_TESTING=OFF \
         -DTHEROCK_BUNDLE_SYSDEPS=ON
