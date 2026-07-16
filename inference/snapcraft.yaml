@@ -7,16 +7,15 @@ license: MIT
 
 # these need to be kept in sync with build recipe
 version: '7.13'
-base: core24
-
-confinement: devmode
-grade: devel
+base: core26
 
 # therock is amd64-only
 platforms:
   amd64:
     build-on: [amd64]
     build-for: [amd64]
+
+confinement: strict
 
 parts:
   rocm-libs:
@@ -78,7 +77,7 @@ parts:
       pip install -r requirements.txt
 
       # fetch prebuilt toolchain (trusted=yes should be fine because of TLS)
-      echo 'deb [arch=amd64 trusted=yes] https://repo.amd.com/rocm/packages/ubuntu2404 stable main' \
+      echo 'deb [arch=amd64 trusted=yes] https://repo.amd.com/rocm/packages/ubuntu2604 stable main' \
         | tee /etc/apt/sources.list.d/rocm.list
       apt-get update
       apt-get install -y amdrocm-llvm-dev7.13
