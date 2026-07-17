@@ -121,6 +121,7 @@ parts:
       . /etc/os-release
       GPU_TARGETS=$(
         cat /usr/share/pkg-rocm-tools/data/build-targets/$VERSION_CODENAME \
+        | grep -v -e 'gfx942' \
         | xargs printf "%s;" \
         | awk '{ print substr( $0, 1, length($0)-1 ) }'
       )
