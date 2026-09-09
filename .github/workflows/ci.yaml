@@ -2,6 +2,8 @@ name: Full CI/CD pipeline
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '1 0 * * *'
   push:
     branches: [master]
     paths:
@@ -12,12 +14,16 @@ on:
       - .github/workflows/ci.yaml
       - inference/**
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: [self-hosted, amd64, linux, xlarge]
     timeout-minutes: 600
     steps:
@@ -25,7 +31,7 @@ jobs:
         uses: actions/checkout@v7
       - name: Snapcraft pack
         id: snapcraft
-        uses: canonical/craft-actions/snapcraft/pack@main
+        uses: canonical/craft-actions/snapcraft/pack@acd2f2e61c7563b38ba89390ca0e910fa7d2784f
         with:
           path: inference/
       - name: Save CI artifacts

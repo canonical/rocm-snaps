@@ -1,0 +1,19 @@
+name: Check for upstream ROCm updates
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '1 0 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Check for updates
+        run: python3 upgrade.py --check
