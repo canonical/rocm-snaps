@@ -6,7 +6,7 @@ description: |
 license: MIT
 
 # these need to be kept in sync with build recipe
-version: '7.13'
+version: '10.0'
 base: core26
 
 # therock is amd64-only
@@ -20,7 +20,7 @@ confinement: strict
 parts:
   rocm-libs:
     source: https://github.com/ROCm/TheRock.git
-    source-tag: therock-7.13
+    source-tag: therock-10.0
     source-depth: 1
     source-submodules: []
     plugin: nil
@@ -36,7 +36,9 @@ parts:
       - gfortran
       - git
       - git-lfs
+      - gnupg
       - libegl1-mesa-dev
+      - libsqlite3-dev
       - libtool
       - make
       - ninja-build
@@ -55,7 +57,10 @@ parts:
     override-pull: |
       set -e
       craftctl default
-      python3 build_tools/fetch_sources.py \
+      python3 -m venv .pull-venv
+      .pull-venv/bin/pip install --upgrade pip
+      .pull-venv/bin/pip install -r requirements.txt 'meson<1.12'
+      .pull-venv/bin/python build_tools/fetch_sources.py \
         --no-include-system-projects \
         --no-include-compilers \
         --no-include-debug-tools \
@@ -63,7 +68,6 @@ parts:
         --no-include-rocm-systems \
         --no-include-ml-frameworks \
         --no-include-media-libs \
-        --no-include-iree-libs \
         --no-include-math-libraries \
         --source-sets base rocm-systems rocm-libraries
 
@@ -74,44 +78,50 @@ parts:
       python3 -m venv .venv
       source .venv/bin/activate
       pip install --upgrade pip
-      pip install -r requirements.txt
+      pip install -r requirements.txt 'meson<1.12'
 
-      # fetch prebuilt toolchain (trusted=yes should be fine because of TLS)
-      echo 'deb [arch=amd64 trusted=yes] https://repo.amd.com/rocm/packages/ubuntu2604 stable main' \
-        | tee /etc/apt/sources.list.d/rocm.list
+      # fetch prebuilt toolchain
+      ROCM_SERIES=10.0
+      ROCM_ROOT="/opt/rocm/core-$ROCM_SERIES"
+      ROCM_LLVM_PACKAGE="amdrocm-llvm-dev$ROCM_SERIES"
+      install -d -m 0755 /etc/apt/keyrings
+      curl -fsSL https://stable.repo.amd.com/rocm/gpg/packages.gpg \
+        | gpg --dearmor --yes -o /etc/apt/keyrings/amd-rocm.gpg
+      echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/amd-rocm.gpg] https://stable.repo.amd.com/rocm/core/packages/ubuntu2604 stable main' \
+        > /etc/apt/sources.list.d/rocm.list
       apt-get update
-      apt-get install -y amdrocm-llvm-dev7.13
+      apt-get install -y --no-install-recommends "$ROCM_LLVM_PACKAGE"
 
       # populate build/compiler/amd-llvm from the deb install, then mark it
       # prebuilt so CMake skips configure/build/stage of amd-llvm
       echo "Substituting AMD deb LLVM into build/compiler/amd-llvm/stage"
       AMD_LLVM_STAGE="$CRAFT_PART_BUILD/build/compiler/amd-llvm/stage"
       mkdir -p "$AMD_LLVM_STAGE/lib/llvm"
-      cp -a /opt/rocm/core-7.13/lib/llvm/. "$AMD_LLVM_STAGE/lib/llvm/"
+      cp -a "$ROCM_ROOT/lib/llvm/." "$AMD_LLVM_STAGE/lib/llvm/"
       touch "$CRAFT_PART_BUILD/build/compiler/amd-llvm/stage.prebuilt"
 
       # ditto for amd-comgr and hipcc
       echo "Substituting AMD deb comgr into build/compiler/amd-comgr/stage"
       COMGR_STAGE="$CRAFT_PART_BUILD/build/compiler/amd-comgr/stage"
       mkdir -p "$COMGR_STAGE/lib" "$COMGR_STAGE/include" "$COMGR_STAGE/lib/cmake"
-      cp -a /opt/rocm/core-7.13/lib/libamd_comgr.so* "$COMGR_STAGE/lib/" 2>/dev/null || true
-      cp -a /opt/rocm/core-7.13/include/amd_comgr "$COMGR_STAGE/include/"
-      cp -a /opt/rocm/core-7.13/lib/cmake/amd_comgr "$COMGR_STAGE/lib/cmake/"
+      cp -a $ROCM_ROOT/lib/libamd_comgr.so* "$COMGR_STAGE/lib/"
+      cp -a "$ROCM_ROOT/include/amd_comgr" "$COMGR_STAGE/include/"
+      cp -a "$ROCM_ROOT/lib/cmake/amd_comgr" "$COMGR_STAGE/lib/cmake/"
       touch "$CRAFT_PART_BUILD/build/compiler/amd-comgr/stage.prebuilt"
       echo "Substituting AMD deb hipcc into build/compiler/hipcc/stage"
       HIPCC_STAGE="$CRAFT_PART_BUILD/build/compiler/hipcc/stage"
       mkdir -p "$HIPCC_STAGE/bin"
-      cp -a /opt/rocm/core-7.13/bin/hipcc* "$HIPCC_STAGE/bin/" 2>/dev/null || true
-      cp -a /opt/rocm/core-7.13/bin/hipconfig* "$HIPCC_STAGE/bin/" 2>/dev/null || true
+      cp -a $ROCM_ROOT/bin/hipcc* "$HIPCC_STAGE/bin/"
+      cp -a $ROCM_ROOT/bin/hipconfig* "$HIPCC_STAGE/bin/"
       touch "$CRAFT_PART_BUILD/build/compiler/hipcc/stage.prebuilt"
 
       # and also for sysdeps, except these will be rebuilt
       echo "Staging rocm_sysdeps alongside lib/llvm"
       mkdir -p "$AMD_LLVM_STAGE/lib/rocm_sysdeps"
-      cp -a /opt/rocm/core-7.13/lib/rocm_sysdeps/. "$AMD_LLVM_STAGE/lib/rocm_sysdeps/"
+      cp -a "$ROCM_ROOT/lib/rocm_sysdeps/." "$AMD_LLVM_STAGE/lib/rocm_sysdeps/"
 
       # then remove system package to make sure it doesn't interfere with the build
-      apt-get remove -y amdrocm-llvm-dev7.13
+      apt-get remove -y "$ROCM_LLVM_PACKAGE"
       apt-get autoremove -y
 
       # avoid breaking builds on newer compilers
