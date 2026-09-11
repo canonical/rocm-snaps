@@ -17,6 +17,13 @@ platforms:
 
 confinement: strict
 
+slots:
+  runtime:
+    interface: content
+    content: rocm-inference-10-0-2604
+    read:
+      - $SNAP/opt/rocm
+
 parts:
   rocm-libs:
     source: https://github.com/ROCm/TheRock.git
