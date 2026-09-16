@@ -5,7 +5,7 @@ description: |
 
 license: MIT
 
-# these need to be kept in sync with build recipe
+# NOTE: upstream source tag is derived from this version
 version: '10.0'
 base: core26
 
@@ -27,7 +27,7 @@ slots:
 parts:
   rocm-libs:
     source: https://github.com/ROCm/TheRock.git
-    source-tag: therock-10.0
+    source-tag: "therock-${SNAPCRAFT_PROJECT_VERSION}"
     source-depth: 1
     source-submodules: []
     plugin: nil
@@ -88,7 +88,7 @@ parts:
       pip install -r requirements.txt 'meson<1.12'
 
       # fetch prebuilt toolchain
-      ROCM_SERIES=10.0
+      ROCM_SERIES="${SNAPCRAFT_PROJECT_VERSION}"
       ROCM_ROOT="/opt/rocm/core-$ROCM_SERIES"
       ROCM_LLVM_PACKAGE="amdrocm-llvm-dev$ROCM_SERIES"
       install -d -m 0755 /etc/apt/keyrings

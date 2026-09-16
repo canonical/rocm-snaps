@@ -93,8 +93,6 @@ def is_compatible(tag, packages):
 
 
 def update_recipe(original_recipe, new_version) -> str:
-    major, minor, _ = version_tuple(new_version)
-    series = f'{major}.{minor}'
     snap_version = new_version.removeprefix('therock-')
 
     updated, version_count = re.subn(
@@ -102,18 +100,8 @@ def update_recipe(original_recipe, new_version) -> str:
         f'version: \'{snap_version}\'',
         original_recipe,
     )
-    updated, tag_count = re.subn(
-        r'(?m)source-tag: ["\']?therock-\S+["\']?',
-        f'source-tag: {new_version}',
-        updated,
-    )
-    updated, series_count = re.subn(
-        r'(?m)ROCM_SERIES=["\']?[0-9]+\.[0-9]+["\']?',
-        f'ROCM_SERIES={series}',
-        updated,
-    )
 
-    if (version_count, tag_count, series_count) != (1, 1, 1):
+    if version_count != 1:
         raise RuntimeError("refusing to update an unexpected recipe layout")
 
     return updated
@@ -134,16 +122,12 @@ if __name__ == '__main__':
     original_recipe = recipe_path.read_text()
 
     version_match = re.search(r'(?m)^\s*version: ["\']?([^"\']+)["\']?$', original_recipe)
-    tag_match = re.search(r'(?m)^\s*source-tag: ["\']?(therock-\S+)["\']?$', original_recipe)
-    series_match = re.search(r'(?m)^\s*ROCM_SERIES=["\']?([0-9]+\.[0-9]+)["\']?$', original_recipe)
-    if not all((version_match, tag_match, series_match)):
-        raise RuntimeError(f"recipe at '{recipe_path}' does not contain the expected version fields")
+    if not version_match:
+        raise RuntimeError(f"recipe at '{recipe_path}' does not contain the expected version field")
 
-    current_tag = tag_match.group(1)
-    current_series = series_match.group(1)
-    current_major, current_minor, _ = version_tuple(current_tag)
-    if current_series != f'{current_major}.{current_minor}':
-        raise RuntimeError(f"recipe source tag ({current_tag}) and ROCM_SERIES ({current_series}) are inconsistent")
+    current_version = version_match.group(1)
+    current_tag = f'therock-{current_version}'
+    version_tuple(current_tag)
 
     candidates = [args.target] if args.target else fetch_upstream_tags()
     package_names = fetch_package_names()
