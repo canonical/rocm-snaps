@@ -49,6 +49,7 @@ parts:
       - libtool
       - make
       - ninja-build
+      - patch
       - patchelf
       - pkg-config
       - pkg-rocm-tools
@@ -64,6 +65,7 @@ parts:
     override-pull: |
       set -e
       craftctl default
+      patch -p1 < "$CRAFT_PROJECT_DIR/rocrand-disable-benchmark-deps.patch"
       python3 -m venv .pull-venv
       .pull-venv/bin/pip install --upgrade pip
       .pull-venv/bin/pip install -r requirements.txt 'meson<1.12'
@@ -88,7 +90,7 @@ parts:
       pip install -r requirements.txt 'meson<1.12'
 
       # fetch prebuilt toolchain
-      ROCM_SERIES="${SNAPCRAFT_PROJECT_VERSION}"
+      ROCM_SERIES=$(echo "$SNAPCRAFT_PROJECT_VERSION" | cut -d. -f1,2)
       ROCM_ROOT="/opt/rocm/core-$ROCM_SERIES"
       ROCM_LLVM_PACKAGE="amdrocm-llvm-dev$ROCM_SERIES"
       install -d -m 0755 /etc/apt/keyrings
@@ -148,6 +150,7 @@ parts:
         -DTHEROCK_ENABLE_CORE_RUNTIME=ON \
         -DTHEROCK_ENABLE_HIP_RUNTIME=ON \
         -DTHEROCK_ENABLE_BLAS=ON \
+        -DTHEROCK_ENABLE_RAND=ON \
         -DhipBLASLt_CMAKE_ARGS="-DCMAKE_CXX_FLAGS=-isystem${CRAFT_PART_BUILD}/build/core/clr/dist/include" \
         -DTHEROCK_ENABLE_ROCWMMA=ON \
         -DTHEROCK_AMDGPU_FAMILIES="$GPU_TARGETS" \
@@ -157,7 +160,7 @@ parts:
         -DTHEROCK_BUNDLE_SYSDEPS=ON
 
       export CMAKE_BUILD_PARALLEL_LEVEL=$CRAFT_PARALLEL_BUILD_COUNT
-      cmake --build build --target artifact-blas artifact-rocwmma
+      cmake --build build --target artifact-blas artifact-rocwmma artifact-rand
       cmake --build build --target dist-rocm
 
       mkdir -p "$CRAFT_PART_INSTALL/opt/rocm"

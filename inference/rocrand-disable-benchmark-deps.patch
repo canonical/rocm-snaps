@@ -1,0 +1,12 @@
+diff --git a/math-libs/CMakeLists.txt b/math-libs/CMakeLists.txt
+index ecaf800f2..a8e2951c8 100644
+--- a/math-libs/CMakeLists.txt
++++ b/math-libs/CMakeLists.txt
+@@ -6,6 +6,6 @@ if(THEROCK_ENABLE_RAND)
+   # amd_smi, so they must be disabled when amdsmi is unavailable (e.g., the
+   # prim-isolated CI group THEROCK_ENABLE_ALL=OFF / THEROCK_ENABLE_PRIM=ON).
+-  if(WIN32 OR NOT TARGET amdsmi)
++  if(NOT THEROCK_BUILD_TESTING OR WIN32 OR NOT TARGET amdsmi)
+     set(_primlibs_benchmark_enable "OFF")
+     set(_primlibs_benchmark_deps)
+     set(_primlibs_benchmark_includes)
