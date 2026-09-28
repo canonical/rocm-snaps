@@ -1,5 +1,8 @@
 job_queue: 202604-38596
 
+global_timeout: 14400
+output_timeout: 3600
+
 provision_data:
   distro: desktop-26-04-uefi
 
@@ -47,8 +50,17 @@ test_data:
     echo '------------- TESTS --------------'
     ssh ubuntu@$DEVICE_IP '
       set -e
-      sudo snap install --devmode rocm-inference --channel=latest/edge
+
+      sudo snap install rocm-inference --channel=latest/edge
       snap info rocm-inference
+
+      ROCM=/snap/rocm-inference/current/opt/rocm
+      export ROCM_PATH="$ROCM"
+      export HIP_PATH="$ROCM"
+      export LD_LIBRARY_PATH="$ROCM/lib:$ROCM/lib/llvm/lib:$ROCM/lib/rocm_sysdeps/lib:${LD_LIBRARY_PATH:-}"
+
+      "$ROCM/bin/hipblaslt-bench" --verify -r f32_r \
+      | grep -e "\[0\]" -e "f32_r" | cut -d"," -f 37-41 | column -t -s","
     ' 2>&1 | tee artifacts/test.log
 
     echo '----------- ARTIFACTS ------------'
