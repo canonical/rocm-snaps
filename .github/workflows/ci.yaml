@@ -16,10 +16,12 @@ on:
     paths:
       - .github/workflows/ci.yaml
       - inference/**
+      - test/**
   pull_request:
     paths:
       - .github/workflows/ci.yaml
       - inference/**
+      - test/*
 
 permissions:
   contents: read
