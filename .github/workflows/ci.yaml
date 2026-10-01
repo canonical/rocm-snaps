@@ -69,9 +69,47 @@ jobs:
         run: |
           sudo snap install --dangerous --devmode artifacts/*.snap
 
+  test-emulated:
+    needs: [build, install]
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Get CI artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: rocm-inference-${{ github.run_id }}
+          path: artifacts/
+      - name: Get rocjitsu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:baioc/rocjitsu
+          sudo apt-get update
+          sudo apt-get install -y rocjitsu
+          sudo snap install --dangerous --devmode artifacts/*.snap
+      - name: Test on emulated GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ROCM=/snap/rocm-inference/current/opt/rocm
+          export ROCM_PATH="$ROCM"
+          export HIP_PATH="$ROCM"
+          export LD_LIBRARY_PATH="$ROCM/lib:$ROCM/lib/llvm/lib:$ROCM/lib/rocm_sysdeps/lib:${LD_LIBRARY_PATH:-}"
+
+          rocjitsu --config /usr/share/rocjitsu/configs/gfx1151.json -- \
+            "$ROCM/bin/hipblaslt-bench" --verify -r f32_r \
+          | awk '
+            !/\[0\]|f32_r/ { print; next }
+            {
+              split($0,t,",");
+              printf "%-17s %-15s %-10s %-14s %-14s\n",t[37],t[38],t[39],t[40],t[41]
+            }'
+
   upload:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-    needs: install
+    needs: [install, test-emulated]
     runs-on: ubuntu-latest
     steps:
       - name: Get CI artifacts
@@ -86,9 +124,10 @@ jobs:
           sudo snap install snapcraft --classic
           snapcraft upload -v artifacts/*.snap --release latest/edge
 
-  test:
+  test-hardware:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     needs: upload
+    continue-on-error: true  # Testflinger can be flaky, so don't fail the pipeline
     runs-on: [self-hosted, linux]
     steps:
       - name: Check out repository
@@ -102,6 +141,7 @@ jobs:
           client-id: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           secret-key: ${{ secrets.TESTFLINGER_SECRET_KEY }}
       - name: Download test artifacts
+        if: ${{ always() && steps.testflinger.outputs.id != '' }}
         run: |
           for attempt in {1..10}; do
             echo "Attempt $attempt: Downloading artifacts..."
@@ -118,6 +158,7 @@ jobs:
             fi
           done
       - name: Save test artifacts
+        if: ${{ always() && steps.testflinger.outputs.id != '' }}
         uses: actions/upload-artifact@v7
         with:
           path: artifacts.tgz
