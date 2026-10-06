@@ -10,7 +10,7 @@ on:
         default: false
 
   schedule:
-    - cron: '1 0 * * *'
+    - cron: '1 0 */3 * *'
   push:
     branches: [master]
     paths:
