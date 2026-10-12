@@ -12,7 +12,9 @@ on:
   schedule:
     - cron: '1 0 */3 * *'
   push:
-    branches: [master]
+    branches:
+      - master
+      - upgrade/*
     paths:
       - .github/workflows/ci.yaml
       - inference/**
