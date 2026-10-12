@@ -6,7 +6,7 @@ description: |
 license: MIT
 
 # NOTE: upstream source tag is derived from this version
-version: '10.0'
+version: '10.1'
 base: core26
 
 # therock is amd64-only
