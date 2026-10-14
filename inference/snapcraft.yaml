@@ -146,6 +146,8 @@ parts:
         | paste -sd ';'
       )
 
+      export HIP_DEVICE_LIB_PATH="$CRAFT_PART_BUILD/build/compiler/amd-llvm/dist/lib/llvm/amdgcn/bitcode"
+
       cmake --fresh -B build -G Ninja . \
         -DTHEROCK_ENABLE_ALL=OFF \
         -DTHEROCK_ENABLE_CORE_RUNTIME=ON \
