@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-from pathlib import Path
 import argparse
 import gzip
+from pathlib import Path
 import re
 import subprocess
 import sys
@@ -11,6 +11,13 @@ import urllib.request
 
 
 TAG_RE = re.compile(r'^therock-(\d+)\.(\d+)(?:\.(\d+))?$')
+REPO_INDEX = 'https://stable.repo.amd.com/rocm/core/packages/ubuntu2604/dists/stable/main/binary-amd64/Packages.gz'
+GPU_ISAS = ('gfx1151', 'gfx1100', 'gfx950')
+HOST_PACKAGES = (
+    'sysdeps', 'base', 'runtime', 'amdsmi', 'math-common', 'profiler-base',
+    'blas-host', 'rand-host', 'solver-host', 'sparse-host', 'llvm', 'llvm-dev',
+    'runtime-dev', 'blas-dev', 'hipblas-common-dev', 'rand-dev', 'ccl-dev',
+)
 
 cli = argparse.ArgumentParser(description=(
     "Update ROCm snaps to the newest TheRock tag " +
@@ -63,32 +70,30 @@ def fetch_upstream_tags() -> list[str]:
 
 
 def fetch_package_names() -> set[str]:
-    url = 'https://stable.repo.amd.com/rocm/core/packages/ubuntu2604/dists/stable/main/binary-amd64/Packages.gz'
-    with urllib.request.urlopen(url, timeout=60) as response:
+    with urllib.request.urlopen(REPO_INDEX, timeout=60) as response:
         data = gzip.decompress(response.read()).decode()
-
     names = set()
-
     for paragraph in data.split('\n\n'):
-        fields = {}
-        for line in paragraph.splitlines():
-            if ': ' in line and not line.startswith((' ', '\t')):
-                key, value = line.split(': ', 1)
-                fields[key] = value
-        if fields.get('Architecture') == 'amd64' and 'Package' in fields:
+        fields = dict(
+            line.split(': ', 1) for line in paragraph.splitlines()
+            if ': ' in line and not line.startswith((' ', '\t'))
+        )
+        if fields.get('Architecture') == 'amd64' and fields.get('Package'):
             names.add(fields['Package'])
-
     return names
 
 
 def is_compatible(tag, packages):
-    major, minor, _ = version_tuple(tag)
+    major, minor, patch = version_tuple(tag)
     series = f'{major}.{minor}'
-    required = {
-        f'amdrocm-llvm{series}',
-        f'amdrocm-runtime{series}',
-        f'amdrocm-sysdeps{series}',
-    }
+    if patch:
+        return False
+    required = {f'amdrocm-{name}{series}' for name in HOST_PACKAGES}
+    required.update(
+        f'amdrocm-{name}{series}-{isa}'
+        for name in ('blas', 'rand', 'solver', 'sparse')
+        for isa in GPU_ISAS
+    )
     return required <= packages
 
 
@@ -133,9 +138,17 @@ if __name__ == '__main__':
     package_names = fetch_package_names()
     compatible_tags = [tag for tag in candidates if is_compatible(tag, package_names)]
     if not compatible_tags:
-        raise RuntimeError(f"none of the candidate TheRock tags ({candidates}) has a complete AMD package set published")
+        raise RuntimeError(f"none of the candidate TheRock tags ({candidates}) has the complete AMD package set")
 
     selected = max(compatible_tags, key=version_tuple)
+    if version_tuple(selected)[:2] > version_tuple(current_tag)[:2]:
+        print(f'{selected} is available; update the snap version, package names, '
+              'and content identifier together after reviewing its package set')
+        if args.check:
+            sys.exit(1)
+        if not args.dry_run:
+            raise RuntimeError('automatic upgrades across ROCm series are not supported')
+        sys.exit(0)
     if not args.target and version_tuple(selected) <= version_tuple(current_tag):
         print(f"Current version ({current_tag}) already up to date with latest candidate ({selected})")
         sys.exit(0)

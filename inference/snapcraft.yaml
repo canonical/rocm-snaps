@@ -17,6 +17,14 @@ platforms:
 
 confinement: strict
 
+package-repositories:
+  - type: apt
+    url: https://stable.repo.amd.com/rocm/core/packages/ubuntu2604
+    suites: [stable]
+    components: [main]
+    architectures: [amd64]
+    key-id: D0F004A0025A1145C7807FCD0701EAC4D5E02107
+
 slots:
   runtime:
     interface: content
@@ -25,144 +33,68 @@ slots:
       - $SNAP/opt/rocm
 
 parts:
-  rocm-libs:
-    source: https://github.com/ROCm/TheRock.git
-    source-tag: "therock-${SNAPCRAFT_PROJECT_VERSION}"
-    source-depth: 1
-    source-submodules: []
+  common:
     plugin: nil
-
-    build-packages:
-      - automake
-      - bison
-      - ccache
-      - cmake
-      - curl
-      - flex
-      - g++
-      - gfortran
-      - git
-      - git-lfs
-      - gnupg
-      - libegl1-mesa-dev
-      - libsqlite3-dev
-      - libtool
-      - make
-      - ninja-build
-      - patch
-      - patchelf
-      - pkg-config
-      - pkg-rocm-tools
-      - python3-dev
-      - python3-venv
-      - texinfo
-      - xxd
-
     stage-packages:
+      - amdrocm-sysdeps${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-base${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-runtime${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-amdsmi${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-math-common${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-profiler-base${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-blas-host${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-rand-host${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-solver-host${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-sparse-host${SNAPCRAFT_PROJECT_VERSION}
       - libatomic1
       - libquadmath0
+      - python3
+    organize:
+      opt/rocm/core-${SNAPCRAFT_PROJECT_VERSION}: opt/rocm
 
-    override-pull: |
-      set -e
-      craftctl default
-      patch -p1 < "$CRAFT_PROJECT_DIR/rocrand-disable-benchmark-deps.patch"
-      python3 -m venv .pull-venv
-      .pull-venv/bin/pip install --upgrade pip
-      .pull-venv/bin/pip install -r requirements.txt 'meson<1.12'
-      .pull-venv/bin/python build_tools/fetch_sources.py \
-        --no-include-system-projects \
-        --no-include-compilers \
-        --no-include-debug-tools \
-        --no-include-rocm-libraries \
-        --no-include-rocm-systems \
-        --no-include-ml-frameworks \
-        --no-include-media-libs \
-        --no-include-math-libraries \
-        --source-sets base rocm-systems rocm-libraries
+  dev:
+    after: [common]
+    plugin: nil
+    stage-packages:
+      - amdrocm-llvm${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-llvm-dev${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-runtime-dev${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-blas-dev${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-hipblas-common-dev${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-rand-dev${SNAPCRAFT_PROJECT_VERSION}
+      - amdrocm-ccl-dev${SNAPCRAFT_PROJECT_VERSION}
+    organize:
+      opt/rocm/core-${SNAPCRAFT_PROJECT_VERSION}: opt/rocm
 
-    override-build: |
-      set -e
+  gfx1151:
+    after: [common, dev]
+    plugin: nil
+    stage-packages:
+      - amdrocm-blas${SNAPCRAFT_PROJECT_VERSION}-gfx1151
+      - amdrocm-rand${SNAPCRAFT_PROJECT_VERSION}-gfx1151
+      - amdrocm-solver${SNAPCRAFT_PROJECT_VERSION}-gfx1151
+      - amdrocm-sparse${SNAPCRAFT_PROJECT_VERSION}-gfx1151
+    organize:
+      opt/rocm/core-${SNAPCRAFT_PROJECT_VERSION}: opt/rocm
 
-      # install python deps
-      python3 -m venv .venv
-      source .venv/bin/activate
-      pip install --upgrade pip
-      pip install -r requirements.txt 'meson<1.12'
+  gfx1100:
+    after: [common, dev]
+    plugin: nil
+    stage-packages:
+      - amdrocm-blas${SNAPCRAFT_PROJECT_VERSION}-gfx1100
+      - amdrocm-rand${SNAPCRAFT_PROJECT_VERSION}-gfx1100
+      - amdrocm-solver${SNAPCRAFT_PROJECT_VERSION}-gfx1100
+      - amdrocm-sparse${SNAPCRAFT_PROJECT_VERSION}-gfx1100
+    organize:
+      opt/rocm/core-${SNAPCRAFT_PROJECT_VERSION}: opt/rocm
 
-      # fetch prebuilt toolchain
-      ROCM_SERIES=$(echo "$SNAPCRAFT_PROJECT_VERSION" | cut -d. -f1,2)
-      ROCM_ROOT="/opt/rocm/core-$ROCM_SERIES"
-      ROCM_LLVM_PACKAGE="amdrocm-llvm-dev$ROCM_SERIES"
-      install -d -m 0755 /etc/apt/keyrings
-      curl -fsSL https://stable.repo.amd.com/rocm/gpg/packages.gpg \
-        | gpg --dearmor --yes -o /etc/apt/keyrings/amd-rocm.gpg
-      echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/amd-rocm.gpg] https://stable.repo.amd.com/rocm/core/packages/ubuntu2604 stable main' \
-        > /etc/apt/sources.list.d/rocm.list
-      apt-get update
-      apt-get install -y --no-install-recommends "$ROCM_LLVM_PACKAGE"
-
-      # populate build/compiler/amd-llvm from the deb install, then mark it
-      # prebuilt so CMake skips configure/build/stage of amd-llvm
-      echo "Substituting AMD deb LLVM into build/compiler/amd-llvm/stage"
-      AMD_LLVM_STAGE="$CRAFT_PART_BUILD/build/compiler/amd-llvm/stage"
-      mkdir -p "$AMD_LLVM_STAGE/lib/llvm"
-      cp -a "$ROCM_ROOT/lib/llvm/." "$AMD_LLVM_STAGE/lib/llvm/"
-      touch "$CRAFT_PART_BUILD/build/compiler/amd-llvm/stage.prebuilt"
-
-      # ditto for amd-comgr and hipcc
-      echo "Substituting AMD deb comgr into build/compiler/amd-comgr/stage"
-      COMGR_STAGE="$CRAFT_PART_BUILD/build/compiler/amd-comgr/stage"
-      mkdir -p "$COMGR_STAGE/lib" "$COMGR_STAGE/include" "$COMGR_STAGE/lib/cmake"
-      cp -a $ROCM_ROOT/lib/libamd_comgr.so* "$COMGR_STAGE/lib/"
-      cp -a "$ROCM_ROOT/include/amd_comgr" "$COMGR_STAGE/include/"
-      cp -a "$ROCM_ROOT/lib/cmake/amd_comgr" "$COMGR_STAGE/lib/cmake/"
-      touch "$CRAFT_PART_BUILD/build/compiler/amd-comgr/stage.prebuilt"
-      echo "Substituting AMD deb hipcc into build/compiler/hipcc/stage"
-      HIPCC_STAGE="$CRAFT_PART_BUILD/build/compiler/hipcc/stage"
-      mkdir -p "$HIPCC_STAGE/bin"
-      cp -a $ROCM_ROOT/bin/hipcc* "$HIPCC_STAGE/bin/"
-      cp -a $ROCM_ROOT/bin/hipconfig* "$HIPCC_STAGE/bin/"
-      touch "$CRAFT_PART_BUILD/build/compiler/hipcc/stage.prebuilt"
-
-      # and also for sysdeps, except these will be rebuilt
-      echo "Staging rocm_sysdeps alongside lib/llvm"
-      mkdir -p "$AMD_LLVM_STAGE/lib/rocm_sysdeps"
-      cp -a "$ROCM_ROOT/lib/rocm_sysdeps/." "$AMD_LLVM_STAGE/lib/rocm_sysdeps/"
-
-      # then remove system package to make sure it doesn't interfere with the build
-      apt-get remove -y "$ROCM_LLVM_PACKAGE"
-      apt-get autoremove -y
-
-      # avoid breaking builds on newer compilers
-      export CFLAGS="${CFLAGS:-} -Wno-error"
-
-      # read targets from ubuntu release (given by pkg-rocm-tools)
-      . /etc/os-release
-      GPU_TARGETS=$(
-        cat /usr/share/pkg-rocm-tools/data/build-targets/$VERSION_CODENAME \
-        | grep -v -e 'gfx942' \
-        | { cat; echo 'gfx950'; } \
-        | sort -u \
-        | paste -sd ';'
-      )
-
-      cmake --fresh -B build -G Ninja . \
-        -DTHEROCK_ENABLE_ALL=OFF \
-        -DTHEROCK_ENABLE_CORE_RUNTIME=ON \
-        -DTHEROCK_ENABLE_HIP_RUNTIME=ON \
-        -DTHEROCK_ENABLE_BLAS=ON \
-        -DTHEROCK_ENABLE_RAND=ON \
-        -DhipBLASLt_CMAKE_ARGS="-DCMAKE_CXX_FLAGS=-isystem${CRAFT_PART_BUILD}/build/core/clr/dist/include" \
-        -DTHEROCK_ENABLE_ROCWMMA=ON \
-        -DTHEROCK_AMDGPU_FAMILIES="$GPU_TARGETS" \
-        -DTHEROCK_AMDGPU_DIST_BUNDLE_NAME="$(echo "$GPU_TARGETS" | sed 's/;/_/g')" \
-        -DBUILD_TESTING=OFF \
-        -DTHEROCK_BUILD_TESTING=OFF \
-        -DTHEROCK_BUNDLE_SYSDEPS=ON
-
-      export CMAKE_BUILD_PARALLEL_LEVEL=$CRAFT_PARALLEL_BUILD_COUNT
-      cmake --build build --target artifact-blas artifact-rocwmma artifact-rand
-      cmake --build build --target dist-rocm
-
-      mkdir -p "$CRAFT_PART_INSTALL/opt/rocm"
-      cp -a build/dist/rocm/. "$CRAFT_PART_INSTALL/opt/rocm/"
+  gfx950:
+    after: [common, dev]
+    plugin: nil
+    stage-packages:
+      - amdrocm-blas${SNAPCRAFT_PROJECT_VERSION}-gfx950
+      - amdrocm-rand${SNAPCRAFT_PROJECT_VERSION}-gfx950
+      - amdrocm-solver${SNAPCRAFT_PROJECT_VERSION}-gfx950
+      - amdrocm-sparse${SNAPCRAFT_PROJECT_VERSION}-gfx950
+    organize:
+      opt/rocm/core-${SNAPCRAFT_PROJECT_VERSION}: opt/rocm

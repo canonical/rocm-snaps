@@ -48,6 +48,7 @@ test_data:
     ' | tee artifacts/inventory.log
 
     echo '------------- TESTS --------------'
+    scp test/hip-smoke.cpp ubuntu@$DEVICE_IP:/tmp/hip-smoke.cpp
     ssh ubuntu@$DEVICE_IP '
       set -e
 
@@ -57,10 +58,17 @@ test_data:
       ROCM=/snap/rocm-inference/current/opt/rocm
       export ROCM_PATH="$ROCM"
       export HIP_PATH="$ROCM"
+      export HIP_LIB_PATH="$ROCM/lib"
       export LD_LIBRARY_PATH="$ROCM/lib:$ROCM/lib/llvm/lib:$ROCM/lib/rocm_sysdeps/lib:${LD_LIBRARY_PATH:-}"
 
-      "$ROCM/bin/hipblaslt-bench" --verify -r f32_r \
-      | grep -e "\[0\]" -e "f32_r" | cut -d"," -f 37-41 | column -t -s","
+      "$ROCM/bin/rocminfo" | grep gfx
+      test -f "$ROCM/include/hip/hip_runtime.h"
+      GPU_ISA="$("$ROCM/bin/rocm_agent_enumerator" | grep "^gfx" | sort -u | sed -n "1p")"
+      case "$GPU_ISA" in gfx1151|gfx1100|gfx950) ;; *) exit 1 ;; esac
+      "$ROCM/bin/hipcc" --offload-arch="$GPU_ISA" \
+        -I"$ROCM/include" -L"$ROCM/lib" \
+        /tmp/hip-smoke.cpp -lrocblas -lhiprand -o /tmp/hip-smoke
+      /tmp/hip-smoke
     ' 2>&1 | tee artifacts/test.log
 
     echo '----------- ARTIFACTS ------------'

@@ -68,6 +68,19 @@ jobs:
       - name: Installation test
         run: |
           sudo snap install --dangerous --devmode artifacts/*.snap
+          ROCM=/snap/rocm-inference/current/opt/rocm
+          for path in bin lib include share .kpack; do
+            test -d "$ROCM/$path"
+            test ! -L "$ROCM/$path"
+          done
+          test -x "$ROCM/bin/hipcc"
+          test -x "$ROCM/lib/llvm/bin/clang++"
+          test -f "$ROCM/include/hip/hip_runtime.h"
+          test -f "$ROCM/include/rocwmma/rocwmma.hpp"
+          for isa in gfx1151 gfx1100 gfx950; do
+            test -f "$ROCM/.kpack/blas_lib_${isa}.kpack"
+            test -f "$ROCM/.kpack/rand_lib_${isa}.kpack"
+          done
 
   test-emulated:
     needs: [build, install]
@@ -96,16 +109,13 @@ jobs:
           ROCM=/snap/rocm-inference/current/opt/rocm
           export ROCM_PATH="$ROCM"
           export HIP_PATH="$ROCM"
+          export HIP_LIB_PATH="$ROCM/lib"
           export LD_LIBRARY_PATH="$ROCM/lib:$ROCM/lib/llvm/lib:$ROCM/lib/rocm_sysdeps/lib:${LD_LIBRARY_PATH:-}"
 
-          rocjitsu --config /usr/share/rocjitsu/configs/gfx1151.json -- \
-            "$ROCM/bin/hipblaslt-bench" --verify -r f32_r \
-          | awk '
-            !/\[0\]|f32_r/ { print; next }
-            {
-              split($0,t,",");
-              printf "%-17s %-15s %-10s %-14s %-14s\n",t[37],t[38],t[39],t[40],t[41]
-            }'
+          "$ROCM/bin/hipcc" --offload-arch=gfx1151 \
+            -I"$ROCM/include" -L"$ROCM/lib" \
+            test/hip-smoke.cpp -lrocblas -lhiprand -o /tmp/hip-smoke
+          rocjitsu --config /usr/share/rocjitsu/configs/gfx1151.json -- /tmp/hip-smoke
 
   upload:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
